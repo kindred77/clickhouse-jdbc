@@ -321,7 +321,13 @@ public enum ClickHouseClientOption implements ClickHouseOption {
      * false.
      */
     USE_TIME_ZONE("use_time_zone", "", "Time zone of all DateTime* values. "
-            + "Only used when use_server_time_zone is false. Empty value means client time zone.");
+            + "Only used when use_server_time_zone is false. Empty value means client time zone."),
+
+    /**
+     * Custom time zone. Only works when {@code use_server_time_zone} is set to
+     * false.
+     */
+    TRANS_TO_MULTI_TCP_DIRECT_CONN("trans_to_multi_tcp_direct_conn", false, "Transform to multiple tcp direct connection.");
 
     private final String key;
     private final Serializable defaultValue;
