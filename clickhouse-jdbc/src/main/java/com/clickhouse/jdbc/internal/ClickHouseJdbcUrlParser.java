@@ -79,7 +79,7 @@ public class ClickHouseJdbcUrlParser {
     public static final String JDBC_PREFIX = "jdbc:";
     public static final String JDBC_CLICKHOUSE_PREFIX = JDBC_PREFIX + "clickhouse:";
     public static final String JDBC_ABBREVIATION_PREFIX = JDBC_PREFIX + "ch:";
-    public static final String TRANS_TO_MULTI_TCP_DIRECT_CONN = "trans_to_multi_tcp_direct_conn";
+    public static final String TRANS_TO_MULTI_DIRECT_CONN = "trans_to_multi_direct_conn";
 
     static Properties newProperties() {
         Properties props = new Properties();
@@ -88,10 +88,10 @@ public class ClickHouseJdbcUrlParser {
         return props;
     }
 
-    public static final String SQL_GET_HOST_PORT_IN_CLUSTER = "select distinct host_address,http_port from system.clusters";
+    public static String SQL_GET_HOST_PORT_IN_CLUSTER = "select distinct host_address,http_port from system.clusters where host_address not like '%::1%' order by rand()";
     private static String getNewJDBCUrl(String jdbcUrl, Properties defaults) throws SQLException
     {
-        System.out.println("input jdbcurl is: "+jdbcUrl);
+        log.info("Input jdbcURL is: %s",jdbcUrl);
         String newJdbcUrlPrefix="http://";
         String tmp=jdbcUrl.substring(jdbcUrl.indexOf("://")+4);
         int idxSlash =tmp.indexOf("/");
@@ -112,7 +112,7 @@ public class ClickHouseJdbcUrlParser {
                 newJdbcUrlSuffix="";
             }
         }
-        System.out.println("newJdbcUrlSuffix is: "+newJdbcUrlSuffix);
+        log.debug("New JdbcUrl Suffix is: %s", newJdbcUrlSuffix);
         final ClickHouseRequest<?> clientRequest;
         try {
             String cacheKey = ClickHouseNodes.buildCacheKey(jdbcUrl, defaults);
@@ -138,7 +138,7 @@ public class ClickHouseJdbcUrlParser {
                 client = clientBuilder.nodeSelector(ClickHouseNodeSelector.of(node.getProtocol())).build();
                 clientRequest = client.connect(node);
             } else {
-                System.out.println("Selecting node from: "+nodes);
+                log.debug("Selecting node from: %s", nodes);
                 client = clientBuilder.build(); // use dummy client
                 clientRequest = client.connect(nodes);
                 try {
@@ -169,9 +169,9 @@ public class ClickHouseJdbcUrlParser {
             }
             if(hasNodes) endpoints=endpoints.substring(0,endpoints.length()-1);
 
-            if(!hasNodes) throw SqlExceptionUtils.clientError("No node in cluster or cannot get node info!");
+            if(!hasNodes) throw SqlExceptionUtils.clientError("No node in cluster or cannot get node info using SQL: "+SQL_GET_HOST_PORT_IN_CLUSTER);
 
-            System.out.println("Get tcp direct endpoints: "+endpoints);
+            log.debug("Get direct endpoints: %s", endpoints);
 
             return newJdbcUrlPrefix+endpoints+newJdbcUrlSuffix;
         } catch (Exception e) {
@@ -185,7 +185,7 @@ public class ClickHouseJdbcUrlParser {
             defaults = new Properties();
         }
 
-        Boolean isTransToMultiTcpDirectConn = Boolean.parseBoolean(defaults.getProperty(ClickHouseClientOption.TRANS_TO_MULTI_TCP_DIRECT_CONN.getKey(), Boolean.FALSE.toString()));
+        Boolean isTransToMultiDirectConn = Boolean.parseBoolean(defaults.getProperty(ClickHouseClientOption.TRANS_TO_MULTI_DIRECT_CONN.getKey(), Boolean.FALSE.toString()));
 
         if (ClickHouseChecker.isNullOrBlank(jdbcUrl)) {
             throw SqlExceptionUtils.clientError("Non-blank JDBC URL is required");
@@ -213,18 +213,21 @@ public class ClickHouseJdbcUrlParser {
             String cacheKey = ClickHouseNodes.buildCacheKey(jdbcUrl, defaults);
             ClickHouseNodes nodes = ClickHouseNodes.of(cacheKey, jdbcUrl, defaults);
 
-            //generate new cacheKey and nodes when transform to multiple tcp direct connections
-            if(isTransToMultiTcpDirectConn.booleanValue())
+            //generate new cacheKey and nodes when transform to multiple direct connections
+            if(isTransToMultiDirectConn.booleanValue())
             {
-                System.out.println("begin to transform to multiple tcp direct connections.");
+                //customerzied internal sql
+                SQL_GET_HOST_PORT_IN_CLUSTER=defaults.getProperty(ClickHouseClientOption.TRANS_TO_MULTI_DIRECT_CONN_INTERNAL_SQL.getKey(), SQL_GET_HOST_PORT_IN_CLUSTER);
+                log.info("Given internal SQL: %s", SQL_GET_HOST_PORT_IN_CLUSTER);
+
                 if(nodes.getNodes().size()>1)
                 {
-                    throw SqlExceptionUtils.clientError("Must be only one endpoint when trans_to_multi_tcp_direct_conn is true.");
+                    throw SqlExceptionUtils.clientError("Must be only one endpoint when trans_to_multi_direct_conn is true.");
                 }
-                String directTcpConns=getNewJDBCUrl(jdbcUrl, defaults);
-                System.out.println("Get new jdbcUrl for tcp direct endpoints: "+directTcpConns);
-                cacheKey = ClickHouseNodes.buildCacheKey(directTcpConns, defaults);
-                nodes = ClickHouseNodes.of(cacheKey, directTcpConns, defaults);
+                String directConns=getNewJDBCUrl(jdbcUrl, defaults);
+                log.info("Get new jdbcUrl for direct endpoints: %s", directConns);
+                cacheKey = ClickHouseNodes.buildCacheKey(directConns, defaults);
+                nodes = ClickHouseNodes.of(cacheKey, directConns, defaults);
             }
 
             Properties props = newProperties();

@@ -324,10 +324,12 @@ public enum ClickHouseClientOption implements ClickHouseOption {
             + "Only used when use_server_time_zone is false. Empty value means client time zone."),
 
     /**
-     * Custom time zone. Only works when {@code use_server_time_zone} is set to
+     * Transforming to multiple direct connections for load balance
      * false.
      */
-    TRANS_TO_MULTI_TCP_DIRECT_CONN("trans_to_multi_tcp_direct_conn", false, "Transform to multiple tcp direct connection.");
+    TRANS_TO_MULTI_DIRECT_CONN("trans_to_multi_direct_conn", false, "Transform to multiple direct connection."),
+
+    TRANS_TO_MULTI_DIRECT_CONN_INTERNAL_SQL("trans_to_multi_direct_conn_internal_sql", "select distinct host_address,http_port from system.clusters where host_address not like '%::1%' order by rand()", "Internal SQL for transforming to multiple direct connection.");
 
     private final String key;
     private final Serializable defaultValue;
